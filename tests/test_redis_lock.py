@@ -46,7 +46,8 @@ def redis_server(scope='module'):
 def make_conn(request, redis_server):
     """Redis connection factory."""
     def make_conn_factory():
-        conn_ = StrictRedis(unix_socket_path=UDS_PATH)
+        # conn_ = StrictRedis(unix_socket_path=UDS_PATH)
+        conn_ = StrictRedis(decode_responses=True, unix_socket_path=UDS_PATH)
         request.addfinalizer(conn_.flushdb)
 
         return conn_

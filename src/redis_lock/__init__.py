@@ -3,6 +3,7 @@ from logging import getLogger
 from os import urandom
 from hashlib import sha1
 import weakref
+import binascii
 
 from redis import StrictRedis
 from redis.exceptions import NoScriptError
@@ -181,6 +182,20 @@ class Lock(object):
                                        else None)
         self._lock_renewal_thread = None
 
+        self.encoding = None
+        self.encoding_errors = None
+        if strict:
+            kwargs = redis_client.connection_pool.connection_kwargs
+            if kwargs.get('decode_responses'):
+                self.encoding = kwargs.get('encoding', 'utf-8')
+                self.encoding_errors = kwargs.get('encoding_errors', 'strict')
+        try:
+            self._id.decode('ascii')
+        except UnicodeDecodeError:
+            # https://stackoverflow.com/a/27681852/
+            self._id = binascii.hexlify(self._id)
+            # self._id = base64.encodestring(self._id)
+
     @property
     def _held(self):
         return self.id == self.get_owner_id()
@@ -225,7 +240,11 @@ class Lock(object):
         blpop_timeout = timeout or self._expire or 0
         timed_out = False
         while busy:
-            busy = not self._client.set(self._name, self._id, nx=True, ex=self._expire)
+            if self.encoding:
+                _id = self._id.decode(self.encoding, self.encoding_errors)
+            else:
+                _id = self._id
+            busy = not self._client.set(self._name, _id, nx=True, ex=self._expire)
             if busy:
                 if timed_out:
                     return False
